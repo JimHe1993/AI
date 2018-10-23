@@ -1,0 +1,37 @@
+'''
+线性回归——最小二乘
+by Jim 2018.10.23
+'''
+
+import numpy as np
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+
+from sklearn.linear_model import LinearRegression
+
+if __name__ == "__main__":
+    mpl.rcParams['font.sans-serif'] = [u'SimHei']
+    mpl.rcParams['axes.unicode_minus'] = False
+
+    # 构造数据集
+    x = np.random.rand(100, 1)  # 构造100*1的样本
+    y = 4 + 3 * x + np.random.randn(100, 1)  # 构造标签。添加标准正态分布噪声，完美契合随机噪声服从正态分布的假设
+    # 构建特征空间
+    x_b = np.c_[np.ones((100, 1)), x]
+    print(x_b)
+
+    # 解析解方式求解小样本
+    theta = np.linalg.inv(x_b.T.dot(x_b)).dot(x_b.T).dot(y)
+    print(theta)
+
+    # 模型可视化
+    # plt.scatter(x, y, '*', c='b', ms=2)
+    plt.scatter(x, y)
+    plt.plot(x, theta[0] + theta[1] * x, c='r', lw='4', label='拟合直线')
+    plt.legend(loc='best')
+    plt.show()
+
+    # 使用sklearn
+    lr = LinearRegression()
+    lr.fit(x, y)
+    print(lr.intercept_, lr.coef_)
