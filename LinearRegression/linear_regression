@@ -9,6 +9,68 @@ import matplotlib.pyplot as plt
 
 from sklearn.linear_model import LinearRegression
 
+
+def batch_gd(x, y, init_theta, m_samples, alpha, n_iters):
+    '''
+    批量梯度下降
+    :param x: 特征空间 m_samples*n_features
+    :param y: 标签 m_samples*1
+    :param init_theta: 初始化模型参数
+    :param m_samples: 样本集大小
+    :param alpha: 学习率
+    :param n_iters: 迭代次数
+    :return: 优化后模型参数
+    '''
+    final_theta = init_theta
+    J = np.zeros((n_iters, 1))
+    for i in range(n_iters):
+        J[i] = cost_function(x, y, final_theta, m_samples)
+        # 关于前缀(1 / m_samples)是为了避免数据集大小对损失代价的影响，
+        # 当1000个样本中包含特定100个样本时，肯定1000个样本的损失大于100个样本的损失
+        # 而实际情况是样本集越大，模型学得应该更好，损失也应该更小
+        gd = (1 / m_samples) * x.T.dot(x.dot(final_theta) - y)
+        final_theta = final_theta - gd * alpha
+    return final_theta, J
+
+
+def cost_function(x, y, theta, m_samples):
+    '''
+    经验损失
+    :param x: 特征空间
+    :param y: 标签
+    :param theta: 模型参数
+    :param m_samples: 样本集大小
+    :return: 模型代价
+    '''
+    return (1 / (2 * m_samples)) * np.sum((x.dot(theta) - y) ** 2)
+
+
+def plot_gd(J, title):
+    plt.plot(range(len(J)), J)
+    plt.title(title)
+    plt.show()
+
+
+def learning_schedule(t):
+    return t0 / (t + t1)
+
+
+def stochastic_gd(x, y, theta, n_epoches=100):
+    m = len(y)
+    J = np.zeros((n_epoches * m, 1))
+    count = 0
+    for epoch in range(n_epoches):
+        for i in range(m):
+            J[count] = cost_function(x, y, theta, m)
+            count += 1
+            random_idx = np.random.randint(m)
+            xi = x[random_idx:random_idx + 1]  # 注意矩阵计算形式
+            yi = y[random_idx:random_idx + 1]
+            gd = 2 * xi.T.dot(xi.dot(theta) - yi)
+            theta -= gd * learning_schedule(epoch * m + i)
+    return theta, J
+
+
 if __name__ == "__main__":
     mpl.rcParams['font.sans-serif'] = [u'SimHei']
     mpl.rcParams['axes.unicode_minus'] = False
@@ -22,16 +84,34 @@ if __name__ == "__main__":
 
     # 解析解方式求解小样本
     theta = np.linalg.inv(x_b.T.dot(x_b)).dot(x_b.T).dot(y)
-    print(theta)
+    print('解析解：', theta)
 
     # 模型可视化
-    # plt.scatter(x, y, '*', c='b', ms=2)
-    plt.scatter(x, y)
-    plt.plot(x, theta[0] + theta[1] * x, c='r', lw='4', label='拟合直线')
-    plt.legend(loc='best')
-    plt.show()
+    # plt.scatter(x, y)
+    # plt.plot(x, theta[0] + theta[1] * x, c='r', lw='4', label='拟合直线')
+    # plt.legend(loc='best')
+    # plt.show()
+
+    # 梯度下降法
+    # 批量梯度下降
+    alpha = .1  # 学习率——超参数
+    n_iters = 100  # 最大迭代次数（实际应用），也可以设置梯度阈值超参数——g(t+1) - g(t) < thre 时停止迭代
+    m, n = x_b.shape  # m——样本数量，n——特征空间维度
+    theta = np.random.randn(n, 1)  # 随机初始化模型参数
+    theta, batch_J = batch_gd(x_b, y, theta, m, alpha, n_iters)
+    print('batch_gd: ', theta)
+    plot_gd(batch_J, 'batch_GD')
+
+    # 随机梯度下降
+    n_epoches = 1  # 迭代轮次
+    t0, t1 = 5, 50  # 学习率控制参数
+    m, n = x_b.shape
+    init_theta = np.random.randn(n, 1)
+    theta, stochastic_J = stochastic_gd(x_b, y, init_theta, n_epoches)
+    print('stochastic_gd: ', theta)
+    plot_gd(stochastic_J, 'stochastic_GD')
 
     # 使用sklearn
     lr = LinearRegression()
     lr.fit(x, y)
-    print(lr.intercept_, lr.coef_)
+    print('sklearn: ', lr.intercept_, lr.coef_)
