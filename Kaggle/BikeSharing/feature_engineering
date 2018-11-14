@@ -1,0 +1,119 @@
+'''
+bike sharing 比赛
+by Jim 2018.11.08
+'''
+
+import numpy as np
+import pandas as pd
+
+from sklearn.feature_extraction import DictVectorizer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+
+import warnings
+
+if __name__ == "__main__":
+    # 压制warning
+    warnings.filterwarnings('ignore')
+
+    data = pd.read_csv('./data/train.csv')
+    # print(data.head())
+    # print(data.describe())
+    # print(data.info())
+    # 把datetime切成日期和时间两部分
+    temp = pd.DatetimeIndex(data['datetime'])
+    # print(temp, type(temp))
+    data['date'] = temp.date
+    data['time'] = temp.time
+    # print(data.head())
+    # print(data['date'])  # 一样的，都是取一列
+    # print(data.date)  # 一样的，都是取一列
+    # 时间部分，最细粒度也只到小时，故将小时作为更简洁的特征
+    data['hour'] = pd.to_datetime(data.time, format='%H:%M:%S')
+    # print(data.head())
+    data['hour'] = pd.Index(data['hour']).hour
+    # print(data.head())
+    # 仔细想想，数据只告诉我们是哪天，但是，周末应该用车的人更多
+    # 故可以提取出一个周几字段
+    # 同时，设定一个字段dateDays表示离第一天开始租车多久了（猜测在欧美国家，
+    # 这种绿色环保的出行方式，会迅速蔓延）
+    data['dayofweek'] = pd.DatetimeIndex(data.date).dayofweek  # 周几
+    data['dateDays'] = (data.date - data.date[0]).astype('timedelta64[D]')  # 计算时长
+    # print(data.head())
+    # 丢掉不用的特征
+    data = data.drop(['datetime', 'date', 'time'], axis=1)
+    # print(data.head())
+
+    # --------------简单统计分析--------------- #
+    # 一周中各天的租车情况
+    byday = data.groupby('dayofweek')
+    # print(byday, type(byday))
+    # 统计没注册用户租车情况
+    temp = byday['casual'].sum().reset_index()
+    # print(temp)
+    temp = byday['registered'].sum().reset_index()
+    # print(temp)
+    # 周末既然有不同，便可单独构成特征
+    data['Saturday'] = 0
+    data.Saturday[data.dayofweek == 5] = 1
+    data['Sunday'] = 0
+    data.Sunday[data.dayofweek == 6] = 1
+    data.drop(['casual', 'registered'], axis=1, inplace=True)
+    # print(data[:50])
+    # 简单的相关性分析
+    # print(data.corr())
+    # 分析
+    # 1、season属性与count呈正相关，与temp、atemp、humidity、dateDays呈正相关，与windspeed呈负相关
+    # 其中与dateDays最相关，可以考虑去掉dateDays属性
+    # 2、holiday属性与count无关，与workingday、dayofweek均呈负相关
+    # 3、workingday与count无关，与holiday、dayofweek、Saturday、Sunday均呈负相关，且与dayofweek、Saturday、Sunday，关联较大
+    # 考虑是否应该加入dayofweek、Saturday、Sunday
+    # 4、weather与count呈负相关，与humidity呈正相关
+    # 5、temp与count呈正相关，与season、atemp、hour、dateDays呈正相关，由于与atemp完全相关，
+    # 且atemp是人为感知温度，故剔除atemp属性
+    # 6、humidity与count呈负相关，与season、weather呈正相关，与hour、windspeed成负相关
+    # 7、windspeed与count呈正相关，与hour呈正相关，与season、humidity呈负相关
+    # 8、hour与count呈正相关，与temp、windspeed呈正相关，与humidity呈负相关
+    # 9、dayofweek与count无关
+    # 10、Saturday与count无关
+    # 11、Sunday与count无关
+    # 综上，去掉dateDays、holiday、workingday、atemp、dayofweek、Saturday、Sunday
+    data.drop(['dateDays', 'holiday', 'workingday', 'atemp', 'dayofweek', 'Saturday', 'Sunday'], axis=1, inplace=True)
+    # print(data[:50])
+    # print(data.corr())
+    # --------------简单统计分析--------------- #
+
+    feature_con_cols = ['temp', 'humidity', 'windspeed', 'hour']
+    data_feature_con = data[feature_con_cols]
+    data_feature_con = data_feature_con.fillna('NA')  # 谨防缺失值
+    x_dict_con = data_feature_con.T.to_dict().values()
+    # print(x_dict_con, type(x_dict_con))  # 字典类型
+
+    feature_cat_cols = ['season', 'weather']
+    data_feature_cat = data[feature_cat_cols]
+    data_feature_cat = data_feature_cat.fillna('NA')  # 谨防缺失值
+    x_dict_cat = data_feature_cat.T.to_dict().values()
+    # print(x_dict_cat, type(x_dict_cat))  # 字典类型
+
+    # 向量化
+    vec = DictVectorizer(sparse=False)
+    x_vec_cat = vec.fit_transform(x_dict_cat)
+    # print(x_vec_cat[:50], type(x_vec_cat))  # <class 'numpy.ndarray'>
+    x_vec_con = vec.fit_transform(x_dict_con)
+    # print(x_vec_con[:50], type(x_vec_con))  # <class 'numpy.ndarray'>
+
+    # 标准化连续值
+    scaler = StandardScaler()
+    x_vec_con = scaler.fit_transform(x_vec_con)
+    # print(x_vec_con[:20])
+
+    # one-hot编码
+    one_hot = OneHotEncoder(sparse=False)
+    x_vec_cat = one_hot.fit_transform(x_vec_cat)
+    # print(x_vec_cat[:20])
+
+    x_vec = np.concatenate((x_vec_con, x_vec_cat), axis=1)
+    # print(x_vec[:10])
+
+    # 对标签处理
+    y_vec = data['count'].values.astype(float)
+    # print(y_vec[:20], type(y_vec))
