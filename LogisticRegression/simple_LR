@@ -1,0 +1,103 @@
+'''
+LR练习，使用经典的鸢尾花数据集
+by Jim 2018.11.28
+'''
+
+import numpy as np
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import pandas as pd
+
+from sklearn.datasets import load_iris
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import GridSearchCV
+
+
+def iris_report(results, n_top=3):
+    # print(results['rank_test_score'])
+    # print(results['mean_test_score'])
+    for i in range(1, n_top + 1):
+        candidates = np.flatnonzero(results['rank_test_score'] == i)
+        # print(candidates)
+        for candidate in candidates:
+            print('Model with rank: {0}'.format(i))
+            print('Mean validation score: {0:.3f} (std: {1:.3f})'.format(
+                results['mean_test_score'][candidate],
+                results['std_test_score'][candidate]
+            ))
+            print('Parameters: {0}'.format(results['params'][candidate]))
+
+
+if __name__ == "__main__":
+    mpl.rcParams['font.sans-serif'] = [u'SimHei']
+    mpl.rcParams['axes.unicode_minus'] = False
+
+    iris = load_iris()
+    # print(iris, '\n', type(iris))
+    # iris 是字典类型，包括数据、标签，标签名，简单的数据描述说明，特征名
+    # print(iris.keys())  # dict_keys(['data', 'target', 'target_names', 'DESCR', 'feature_names'])
+    # print(iris['DESCR'])
+    '''
+    鸢尾花数据集描述信息：
+    1、共有150条数据样本，4个数值特征值，共有3个类别
+    2、各个特征的统计特征，包括最大值、最小值、均值和标准差，重要的是各个特征与标签的相关系数，
+    可知，后两维特征与标签呈高正相关，对预测结果影响较大
+    3、整个数据集完备，不存在数据遗失
+    4、数据分布：3个类别分布平衡
+    '''
+    # print(iris['feature_names'], type(iris['feature_names']))  # ['sepal length (cm)', 'sepal width (cm)', 'petal length (cm)', 'petal width (cm)'] <class 'list'>
+    # 获取特征空间
+    feature = iris['data']
+    # print(feature, type(feature))  # <class 'numpy.ndarray'>
+    # 获取标签
+    target = iris['target']
+    # print(target, type(target))  # <class 'numpy.ndarray'>
+    # 转换成DataFrame格式，用以进行数据分析
+    feature_df = pd.DataFrame(data=np.c_[feature, target], columns=iris['feature_names'] + ['target'])
+    # print(feature_df)
+    # print(feature_df.info())
+    # print(feature_df.describe())
+    # print(feature_df.corr())
+    '''
+    各个特征之间及其与标签的相关性分析：
+    1、sepal length与petal length和petal width呈高度正相关，且其与target相关性较低，故可以丢弃
+    2、sepal width与target呈负相关，相关度很低，故可以丢弃
+    3、petal length和petal width与target都呈高正相关，故对模型预测应该有很大的影响，
+    但是，petal length和petal width之间也呈高正相关，故可以只取其一。
+    接下来先用petal width特征进行训练建模
+    '''
+    feature = feature[:, 3:]
+    clf = LogisticRegression(penalty='l2', dual=False, tol=1e-4, C=1.0, solver='liblinear', multi_class='ovr',
+                             n_jobs=1)
+    '''
+    1、使用L2正则化，正则系数为 1.0，solver='liblinear'唯一可以使用L1和L2两种正则化
+    2、当梯度变化小于 1e-4 时，停止迭代，与solver='liblinear'搭配使用
+    3、计算方法：'liblinear'，用于小数据集，只能使用 one VS rest 决策规则
+    4、多分类决策规则：将多个类别转化为多个二分类，最终取概率最大的类别为最终结果。one VS rest
+    5、对偶形式只能配合solver='liblinear'，并且当n_samples > n_features时不建议用对偶形式
+    请看文档
+    '''
+    # 网格搜索-交叉验证
+    param_grid = {'tol': [1e-5, 1e-4, 1e-3, 1e-2], 'C': [0.1, 0.3, 1, 3]}
+    grid_search = GridSearchCV(clf, param_grid=param_grid, n_jobs=1, cv=3)
+    grid_search.fit(feature, target)
+    # print(grid_search.best_score_)
+    # print(grid_search.best_estimator_)
+    # print(grid_search.best_params_)
+    # print(grid_search.best_index_)
+    iris_report(grid_search.cv_results_)
+
+    test = np.linspace(0, 3, 1000).reshape(-1, 1)
+
+    y_prob = grid_search.best_estimator_.predict_proba(test)
+    y_hat = grid_search.best_estimator_.predict(test)
+    print(np.c_[y_prob, y_hat])
+
+    plt.plot(test, y_prob[:, 2], 'g-', label='Iris-Virginica')
+    plt.plot(test, y_prob[:, 1], 'r-', label='Iris-Versicolour')
+    plt.plot(test, y_prob[:, 0], 'b--', label='Iris-Setosa')
+    plt.legend(loc='best')
+    plt.xlabel('花瓣宽度')
+    plt.ylabel('类别概率')
+    plt.show()
+    # 从图中可以看出来花瓣宽度能很好的作为切分特征
